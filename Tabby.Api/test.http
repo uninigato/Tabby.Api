@@ -1,0 +1,124 @@
+@host = https://localhost:7247
+
+### Register A
+POST {{host}}/api/auth/register
+Content-Type: application/json
+
+{ "username": "anna", "email": "anna@test.com", "password": "secret123" }
+
+### Register B
+POST {{host}}/api/auth/register
+Content-Type: application/json
+
+{ "username": "boris", "email": "boris@test.com", "password": "secret123" }
+
+### Login A
+# @name loginA
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "email": "anna@test.com", "password": "newsecret456" }
+
+### Login B
+# @name loginB
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "email": "boris@test.com", "password": "brandnew789" }
+
+### A sends a friend request to B
+POST {{host}}/api/friends/requests
+Authorization: Bearer {{loginA.response.body.$.token}}
+Content-Type: application/json
+
+{ "fullTag": "{{loginB.response.body.$.fullTag}}" }
+
+### B looks at the friends overview (note the friendshipId in "incoming")
+GET {{host}}/api/friends
+Authorization: Bearer {{loginB.response.body.$.token}}
+
+### B accepts (replace 1 with the friendshipId)
+POST {{host}}/api/friends/requests/1/accept
+Authorization: Bearer {{loginB.response.body.$.token}}
+
+### A creates a receipt split with B (replace 2 with boris's userId if different)
+POST {{host}}/api/receipts
+Authorization: Bearer {{loginA.response.body.$.token}}
+Content-Type: application/json
+
+{ "title": "Groceries", "totalAmount": 10.00, "shares": [ { "userId": 3 } ] }
+
+### B marks their own share as paid (replace 1 and 2 with the receipt id and boris's shareId)
+PATCH {{host}}/api/receipts/2/shares/3/paid
+Authorization: Bearer {{loginB.response.body.$.token}}
+Content-Type: application/json
+
+{ "isPaid": true }
+
+### A checks notifications
+GET {{host}}/api/notifications
+Authorization: Bearer {{loginA.response.body.$.token}}
+
+### A checks the unread count
+GET {{host}}/api/notifications/unread-count
+Authorization: Bearer {{loginA.response.body.$.token}}
+
+### A marks it read (replace 1 with the notification id)
+POST {{host}}/api/notifications/1/read
+Authorization: Bearer {{loginA.response.body.$.token}}
+
+### A changes password
+POST {{host}}/api/auth/change-password
+Authorization: Bearer {{loginA.response.body.$.token}}
+Content-Type: application/json
+
+{ "currentPassword": "secret123", "newPassword": "newsecret456" }
+
+### Login A with the NEW password (should be 200)
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "email": "anna@test.com", "password": "newsecret456" }
+
+### Login A with the OLD password (should be 401)
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "email": "anna@test.com", "password": "secret123" }
+
+### Forgot password
+POST {{host}}/api/auth/forgot-password
+Content-Type: application/json
+
+{ "email": "boris@test.com" }
+
+### Forgot password for an unknown email (same response, no email sent)
+POST {{host}}/api/auth/forgot-password
+Content-Type: application/json
+
+{ "email": "nobody@test.com" }
+
+### Reset password (paste the token from the link in smtp4dev)
+POST {{host}}/api/auth/reset-password
+Content-Type: application/json
+
+{ "token": "279F2EA7029FB5A8308F29A84B99D30227A3DFB9519C2BFB6E0D311798DDA2EC", "newPassword": "brandnew789" }
+
+### Boris sends anna a message (replace 1 with anna's userId)
+POST {{host}}/api/messages/1
+Authorization: Bearer {{loginB.response.body.$.token}}
+Content-Type: application/json
+
+{ "content": "are you there?" }
+
+### Anna's unread counts (should show boris with count 1)
+GET {{host}}/api/messages/unread
+Authorization: Bearer {{loginA.response.body.$.token}}
+
+### Anna opens the conversation with boris (replace 2 with boris's userId)
+POST {{host}}/api/messages/2/read
+Authorization: Bearer {{loginA.response.body.$.token}}
+
+### Anna's unread counts again (should be empty)
+GET {{host}}/api/messages/unread
+Authorization: Bearer {{loginA.response.body.$.token}}

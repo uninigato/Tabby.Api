@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Tabby.Api.Tests/Tabby.Api.Tests.csproj" Id="b7e5ab99-1e55-4502-b1e3-bd2e8d4feda2" />
+  <Project Path="Tabby.Api/Tabby.Api.csproj" />
+</Solution>
