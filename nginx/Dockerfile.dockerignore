@@ -1,0 +1,10 @@
+# Ignore everything in the GitHub folder...
+*
+# ...except the two things this image needs
+!Tabby-ui
+!Tabby.Api/nginx
+
+# and the heavy or local-only files inside the frontend
+**/node_modules
+**/dist
+**/.env

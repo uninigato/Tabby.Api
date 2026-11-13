@@ -7,6 +7,9 @@ using Tabby.Api.Controllers;
 using Tabby.Api.Data;
 using Tabby.Api.DTOs;
 using Tabby.Api.Models;
+using Microsoft.AspNetCore.SignalR;
+using NSubstitute;
+using Tabby.Api.Hubs;
 
 namespace Tabby.Api.Tests;
 
@@ -65,13 +68,15 @@ public class ReceiptCreateTests : IDisposable
 
     // A controller that believes `user` is logged in, as if their JWT had been validated.
     // The hub is null because Create never touches it (only SetPaid does).
+    // A controller that believes `user` is logged in, as if their JWT had been validated.
+    // The hub is a stand-in that accepts every push and does nothing with it.
     private ReceiptsController ControllerFor(User user)
     {
         var identity = new ClaimsIdentity(
             new[] { new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()) },
             authenticationType: "test");
 
-        return new ReceiptsController(_db, null!)
+        return new ReceiptsController(_db, Substitute.For<IHubContext<ChatHub>>())
         {
             ControllerContext = new ControllerContext
             {
@@ -184,5 +189,20 @@ public class ReceiptCreateTests : IDisposable
         var share = Assert.Single(receipt.Shares);      // only boris, no share for anna
         Assert.Equal(boris.Id, share.User.UserId);
         Assert.Equal(10.00m, share.Amount);             // the whole total
+    }
+
+    [Fact]
+    public async Task Create_NotifiesEachPersonAdded_ButNotTheCreator()
+    {
+        var anna = AddUser("anna");
+        var boris = AddUser("boris");
+        AddFriendship(anna, boris, FriendshipStatus.Accepted);
+
+        await ControllerFor(anna).Create(RequestWith(boris.Id));
+
+        var notification = Assert.Single(_db.Notifications);   // one, and none for anna
+        Assert.Equal(boris.Id, notification.RecipientId);
+        Assert.Equal(anna.Id, notification.ActorId);
+        Assert.Equal(NotificationType.AddedToReceipt, notification.Type);
     }
 }

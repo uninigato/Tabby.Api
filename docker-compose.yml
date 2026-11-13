@@ -1,0 +1,109 @@
+name: tabby
+
+# Settings shared by the migrate step and both API replicas
+x-api: &api
+  build: ./Tabby.Api
+  image: tabby-api
+  environment:
+    ConnectionStrings__Default: "Host=postgres;Port=5432;Database=tabby;Username=tabby;Password=${POSTGRES_PASSWORD:-tabby}"
+    ConnectionStrings__Redis: "redis:6379"
+    # Must be identical on both replicas, or a token issued by one is rejected by the other
+    Jwt__Key: "${JWT_KEY:-docker-dev-only-key-change-me-0123456789abcdef0123456789}"
+    Email__Host: smtp4dev
+    Email__Port: "25"
+    Email__FrontendBaseUrl: "https://localhost"
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: tabby
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tabby}
+      POSTGRES_DB: tabby
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tabby -d tabby"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Runs once: creates the tables, then exits
+  migrate:
+    <<: *api
+    command: ["--migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api1:
+    <<: *api
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  api2:
+    <<: *api
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  # The only thing the outside world talks to: HTTPS, the React app, the load balancer
+  nginx:
+    build:
+      context: ..
+      dockerfile: Tabby.Api/nginx/Dockerfile
+    image: tabby-web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      api1:
+        condition: service_healthy
+      api2:
+        condition: service_healthy
+
+  # Live logs of every container: http://localhost:9999
+  dozzle:
+    image: amir20/dozzle:latest
+    ports:
+      - "9999:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  # Catches the emails the API sends: http://localhost:5000
+  smtp4dev:
+    image: rnwood/smtp4dev:latest
+    ports:
+      - "5000:80"
+
+volumes:
+  pgdata:

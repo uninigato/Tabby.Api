@@ -11,7 +11,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Database: SQLite for now, swapped for Postgres later
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("Default")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 
 // JWT authentication
 var jwt = builder.Configuration.GetSection("Jwt");
@@ -71,6 +71,13 @@ builder.Services.AddSignalR();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+if (args.Contains("--migrate"))
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+    return;
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
